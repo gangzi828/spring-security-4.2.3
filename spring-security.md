@@ -27,6 +27,8 @@ Copies of this document may be made for your own use and for distribution to oth
 #### 9.2.3 GrantedAuthority
 #### 9.2.4 总结
 ### 9.3 认证
+#### 9.3.1 Spring Security的认证过程?
+#### 9.3.2 直接设置SecurityContextHolder的内容
 ### 9.4 Web应用程序的认证
 ### 9.5 Spring Security的访问控制（授权）
 ### 9.6 本地化
@@ -138,6 +140,103 @@ UserDetails loadUserByUsername(String username) throws UsernameNotFoundException
 现在，您已经了解了这些重复使用的组件，接下来我们就仔细看看认证过程。
 
 ### 9.3 认证
+Spring Security可以与其他的认证环境集成。 尽管我们建议使用Spring Security进行身份验证，但Spring Security仍然支持与现有的容器管理身份验证集成 - 与您自己的专有身份验证系统集成在一起。
+#### 9.3.1 Spring Security的认证过程?
+让我们看一个大家都熟悉的标准认证场景。
+
+1.用户使用username和password登录
+
+2.系统验证这个username的password是否是正确的
+
+3.假设第二步验证成功，获取该用户的上下文信息（如他的角色列表）
+
+4.围绕该用户建立安全上下文（security context）
+
+5.用户继续执行一些由访问控制机制保护的操作，该访问控制机制根据当前的安全上下文信息检查针对该操作的所需权限。
+
+前三个步骤构成了身份认证过程，因此，我们将看看Spring Security是如何进行身份认证的。
+
+1. 获取username和password并将其组合为UsernamePasswordAuthenticationToken（我们前面看到的Authentication接口的一个实例）的一个实例。
+2. UsernamePasswordAuthenticationToken被传递给AuthenticationManager的实例以进行验证。
+3. AuthenticationManager在成功认证时返回完整的Authentication实例。
+4. 安全上下文(SecurityContext)通过调用SecurityContextHolder.getContext().setAuthentication（...）方法创建的，调用时需要传入返回的Authentication对象。
+
+通过上面四个步骤，用户已经认证成功。 我们来看一些示例代码。
+
+```
+import org.springframework.security.authentication.*;
+import org.springframework.security.core.*;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+public class AuthenticationExample {
+private static AuthenticationManager am = new SampleAuthenticationManager();
+
+public static void main(String[] args) throws Exception {
+	BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+
+	while(true) {
+	System.out.println("Please enter your username:");
+	String name = in.readLine();
+	System.out.println("Please enter your password:");
+	String password = in.readLine();
+	try {
+		Authentication request = new UsernamePasswordAuthenticationToken(name, password);
+		Authentication result = am.authenticate(request);
+		SecurityContextHolder.getContext().setAuthentication(result);
+		break;
+	} catch(AuthenticationException e) {
+		System.out.println("Authentication failed: " + e.getMessage());
+	}
+	}
+	System.out.println("Successfully authenticated. Security context contains: " +
+			SecurityContextHolder.getContext().getAuthentication());
+}
+}
+
+class SampleAuthenticationManager implements AuthenticationManager {
+static final List<GrantedAuthority> AUTHORITIES = new ArrayList<GrantedAuthority>();
+
+static {
+	AUTHORITIES.add(new SimpleGrantedAuthority("ROLE_USER"));
+}
+
+public Authentication authenticate(Authentication auth) throws AuthenticationException {
+	if (auth.getName().equals(auth.getCredentials())) {
+	return new UsernamePasswordAuthenticationToken(auth.getName(),
+		auth.getCredentials(), AUTHORITIES);
+	}
+	throw new BadCredentialsException("Bad Credentials");
+}
+}
+```
+这里我们写了一个简单的认证程序，要求用户输入用户名和密码，并执行上述认证过程。 我们在这里实现的AuthenticationManager将验证用户名和密码相同的用户。 它为每个用户分配一个角色。 上面的输出将是：
+
+```
+Please enter your username:
+bob
+Please enter your password:
+password
+Authentication failed: Bad Credentials
+Please enter your username:
+bob
+Please enter your password:
+bob
+Successfully authenticated. Security context contains: \
+org.springframework.security.authentication.UsernamePasswordAuthenticationToken@441d0230: \
+Principal: bob; Password: [PROTECTED]; \
+Authenticated: true; Details: null; \
+Granted Authorities: ROLE_USER
+```
+请注意，在实际开发中，您通常不需要编写这样的代码。 认证过程通常在Spring Security内部进行，例如在Web认证过滤器中。 我们之所以提供上面的示例代码，是为了简单阐述Spring Security的身份认证过程。 当SecurityContextHolder包含完整的Authentication对象时，表明用户身份验证通过。
+
+#### 9.3.2 直接设置SecurityContextHolder的内容
+
+事实上，Spring Security不关心如何将Authentication对象放在SecurityContextHolder中。唯一的要求是SecurityContextHolder要包含一个Authentication对象，Authentication对象代表AbstractSecurityInterceptor（我们将在后面看到更多信息）需要授权的主体。
+
+您可以（并且许多用户）自定义身份认证过滤器或MVC控制器，以便于与Spring Security的身份验证系统进行交互。例如，您可能正在使用容器管理身份验证，这使得当前用户可以从ThreadLocal或JNDI位置获得。或者您工作的公司拥有传统专有认证系统，这种认证系统是一种企业“标准”，您几乎无法控制。在这样的情况下，很容易让Spring Security工作，并且仍然提供授权功能。所有您需要做的是编写从指定位置读取第三方用户信息的过滤器（或其他能实现相同功能的等价组件），构建一个特定于Spring Security的Authentication对象，并将其放入SecurityContextHolder中。在这种情况下，您还需要考虑通常由内置身份验证基础设施自动处理的内容。例如，在将响应写入客户端之前，您可能需要先占先创建一个HTTP Session来缓存请求之间的上下文：响应提交后无法创建会话。
+
+如果您想知道AuthenticationManager是如何实现的，那么我们将在核心服务章节中看到。
 ### 9.4 Web应用程序的认证
 ### 9.5 Spring Security的访问控制（授权）
 ### 9.6 本地化
