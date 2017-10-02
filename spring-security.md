@@ -30,6 +30,10 @@ Copies of this document may be made for your own use and for distribution to oth
 #### 9.3.1 Spring Security的认证过程?
 #### 9.3.2 直接设置SecurityContextHolder的内容
 ### 9.4 Web应用程序的认证
+#### 9.4.1 ExceptionTranslationFilter
+#### 9.4.2 AuthenticationEntryPoint
+#### 9.4.3 认证机制
+#### 9.4.4 存储SecurityContext
 ### 9.5 Spring Security的访问控制（授权）
 ### 9.6 本地化
 ## 10.核心服务
@@ -238,5 +242,54 @@ Granted Authorities: ROLE_USER
 
 如果您想知道AuthenticationManager是如何实现的，那么我们将在核心服务章节中看到。
 ### 9.4 Web应用程序的认证
+
+现在让我们来探讨在Web应用程序中使用Spring Security的情况（不启用web.xml安全性）。用户如何认证和建立安全上下文的呢？
+
+考虑一个典型的Web应用程序的认证过程：
+
+1. 您访问主页，然后单击链接。
+2. 请求发送到服务器，并且服务器决定您已请求受保护的资源。
+3. 由于您目前没有身份验证，服务器会返回一个表明您必须验证的响应。响应将是HTTP响应代码或重定向到特定网页。
+4. 根据身份验证机制，您的浏览器将重定向到特定网页，以便您填写表单，或者浏览器将以某种方式检索您的身份（通过BASIC身份验证对话框，Cookie，X.509证书等） ）。
+5. 浏览器将向服务器发送回应。这将是一个包含您填写的表单内容的HTTP POST，或包含您的身份验证详细信息的HTTP头。
+6. 接下来，服务器将决定所提供的凭证是否有效。如果它们有效，将进行下一步。如果它们无效，通常您的浏览器将被要求再次尝试（所以您将返回到上面的第二步）。
+7. 将重试身份验证过程的原始请求。希望您已通过足够授权的权限验证访问受保护的资源。如果您有足够的访问权限，则请求将成功。否则，您将收到一个HTTP错误代码403，这意味着“禁止”。
+
+Spring Security内置不同的类来负责上述大部分步骤的实现。这些类主要包括（根据它们的调用顺序）ExceptionTranslationFilter，AuthenticationEntryPoint和“认证机制”，认证机制负责调用我们上一节中提到的AuthenticationManager。
+#### 9.4.1 ExceptionTranslationFilter
+ExceptionTranslationFilter是一个Spring Security过滤器，负责检测Spring Security抛出的任何异常。 这些异常通常将由负责授权服务的主要提供者AbstractSecurityInterceptor抛出。 我们将在下一节中讨论AbstractSecurityInterceptor，但是现在我们只需要知道AbstractSecurityInterceptor会抛出Java异常即可，无需关心抛出的是HTTP异常还是主体的认证异常。 相反，ExceptionTranslationFilter负责解析AbstractSecurityInterceptor抛出的具体异常，例如返回错误代码403（如果主体已经通过身份验证，但缺乏足够的访问权限，如上面的第七步），或启动AuthenticationEntryPoint（如果主体未被验证， 如上面的第三步）。
+#### 9.4.2 AuthenticationEntryPoint
+AuthenticationEntryPoint负责上述列表中的第三步。 我们知道，每个Web应用程序都将有一个默认的身份验证策略（可以像Spring Security中几乎所有的配置一样配置）。 每个主要的认证系统都有自己的AuthenticationEntryPoint实现，例如步骤3中描述的BASIC认证、X.509等。
+#### 9.4.3 认证机制
+一旦您的浏览器提交您的身份认证凭据（以HTTP表单形式或者HTTP请求头的形式），服务器上需要“收集”这些身份验证的详细信息。这对应上面列出的第六步。在Spring Security中，我们有一个特殊名称，用于从用户代理（通常是Web浏览器）收集认证详细信息，将其称为“身份验证机制”。示例程序是基于表单登录和基本身份验证的机制。一旦从用户代理收集了认证详细信息，就构建了一个认证“请求”对象，然后呈现给AuthenticationManager。
+
+认证机制接收到包含完整信息的认证对象后，会认为该请求有效，将包含详细认证信息的认证主体放入SecurityContextHolder，并引起原始请求重试（上述第七步）。另一方面，如果AuthenticationManager拒绝了请求，则认证机制将要求用户代理重试（返回到上述的第二步）。
+#### 9.4.4 存储SecurityContext
+根据应用程序的类型，可能需要有一个策略来存储用户操作之间的SecurityContext。在典型的Web应用程序中，用户登录一次，在随后的请求中由其SessionID进行认证标识。服务器将认证主体信息缓存在Session中。在Spring Security中，SecurityContextPersistenceFilter负责存储SecurityContext，默认情况下，它将SecurityContext作为HTTP请求之间的HttpSession属性存储。它将每个请求的上下文恢复到SecurityContextHolder，并且至关重要的是，在请求完成时清除SecurityContextHolder。为了安全起见，您不应该直接与HttpSession交互。而且也完全没有必要直接与HttpSession交互——使用SecurityContextHolder来间接与HttpSession交互。
+
+许多其他类型的应用程序（例如，无状态RESTful Web服务）不使用HTTP会话，并将在每个请求上重新进行身份验证。但是，SecurityContextPersistenceFilter包含在链中仍然很重要，以确保每个请求后SecurityContextHolder被清除。
+
+> 在单个会话中接收并发请求的应用程序中，相同的SecurityContext实例将在线程之间共享。 即使正在使用ThreadLocal，它是从HttpSession为每个线程检索的实例。 如果您希望临时更改线程正在运行的上下文，则会产生影响。 如果您只是使用SecurityContextHolder.getContext()，并在返回的上下文对象上调用setAuthentication（anAuthentication），则认证对象将在共享相同SecurityContext实例的所有并发线程中更改。 您可以自定义SecurityContextPersistenceFilter的行为，为每个请求创建一个全新的SecurityContext，从而防止一个线程中的更改影响另一个线程。 或者，您可以在临时更改上下文的位置创建一个新的实例。 方法SecurityContextHolder.createEmptyContext()总是返回一个新的上下文实例。
+
 ### 9.5 Spring Security的访问控制（授权）
+在Spring Security中,负责访问控制决策的主要接口是AccessDecisionManager。 它具有一个decide方法，该方法拥有一个Authentication对象，“安全对象”（见下文）和适用于对象的安全元数据属性列表（例如访问所需的角色列表）。
+#### 9.5.1 Security和AOP Advice
+如果您熟悉AOP，您会发现有不同类型的通知可供选择：前置通知，后置通知，例外通知和环绕通知。环绕通知是非常有用的，因为advisor可以选择是否继续进行方法调用，是否修改响应，以及是否抛出异常。 Spring Security针对方法调用以及Web请求都提供了环绕通知。我们使用Spring的标准AOP支持来实现方法调用的各种增强，我们使用标准Filter来实现对Web请求的各种增强。（译者注：这段话翻译的很拗口，但大概意思就是Spring Security支持对方法的权限校验和对请求URL的权限校验，针对方法的权限校验采用AOP的实现方式，针对请求URL的权限校验采用的标准的过滤器实现方式）。
+
+对于不熟悉AOP的人员，要了解的重点是Spring Security可以帮助您保护方法调用以及Web请求。大多数人都倾向于在其服务层上保护方法调用。这是因为在当前一代Java EE应用程序中，服务层是大多数业务逻辑驻留的地方。如果您只需要在服务层中保护方法调用，Spring的标准AOP就足够了。如果您需要直接保护安全域对象，您可能会发现AspectJ值得考虑。
+
+您可以选择使用AspectJ或Spring AOP执行方法鉴权，也可以选择使用过滤器执行Web请求鉴权。您也可以一起使用这些几种方式的组合。主流使用模式是执行一些Web请求授权，再加上服务层上的一些Spring AOP方法调用授权。
+#### 9.5.2 安全对象和AbstractSecurityInterceptor
+那么什么是“安全对象”呢？ Spring Security使用该术语来引用可以具有应用于其的安全性（例如授权决策）的任何对象。最常见的示例是方法调用和Web请求。
+
+每个受支持的安全对象类型都有自己的拦截器类，它是AbstractSecurityInterceptor的子类。重要的是，在调用AbstractSecurityInterceptor时，如果主体已经过身份验证，SecurityContextHolder将包含有效的验证。
+
+AbstractSecurityInterceptor为处理安全对象请求提供了一致的工作流，通常为
+
+查找与本请求相关联的“配置属性”
+将安全对象，当前身份验证和配置属性提交给AccessDecisionManager进行授权决定
+可选地，更改发起调用的身份验证
+允许安全对象调用继续（假设访问被授予）
+一旦调用返回，调用AfterInvocationManager。如果调用引发异常，则不会调用AfterInvocationManager。
+
 ### 9.6 本地化
