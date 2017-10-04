@@ -35,6 +35,8 @@ Copies of this document may be made for your own use and for distribution to oth
 #### 9.4.3 认证机制
 #### 9.4.4 存储SecurityContext
 ### 9.5 Spring Security的访问控制（授权）
+#### 9.5.1 Security和AOP Advice
+#### 9.5.2 受保护对象和AbstractSecurityInterceptor
 ### 9.6 本地化
 ## 10.核心服务
 # III.测试
@@ -279,17 +281,53 @@ AuthenticationEntryPoint负责上述列表中的第三步。 我们知道，每�
 对于不熟悉AOP的人员，要了解的重点是Spring Security可以帮助您保护方法调用以及Web请求。大多数人都倾向于在其服务层上保护方法调用。这是因为在当前一代Java EE应用程序中，服务层是大多数业务逻辑驻留的地方。如果您只需要在服务层中保护方法调用，Spring的标准AOP就足够了。如果您需要直接保护安全域对象，您可能会发现AspectJ值得考虑。
 
 您可以选择使用AspectJ或Spring AOP执行方法鉴权，也可以选择使用过滤器执行Web请求鉴权。您也可以一起使用这些几种方式的组合。主流使用模式是执行一些Web请求授权，再加上服务层上的一些Spring AOP方法调用授权。
-#### 9.5.2 安全对象和AbstractSecurityInterceptor
-那么什么是“安全对象”呢？ Spring Security使用该术语来引用可以具有应用于其的安全性（例如授权决策）的任何对象。最常见的示例是方法调用和Web请求。
+#### 9.5.2 受保护对象和AbstractSecurityInterceptor
+那么什么是“受保护对象”呢？ Spring Security使用该术语来引用作为安全性（例如授权决策）载体的任何对象。最常见的是方法调用和Web请求。
 
-每个受支持的安全对象类型都有自己的拦截器类，它是AbstractSecurityInterceptor的子类。重要的是，在调用AbstractSecurityInterceptor时，如果主体已经过身份验证，SecurityContextHolder将包含有效的验证。
+每个受支持的安全对象类型都有自己的拦截器类，这些拦截器类都是AbstractSecurityInterceptor的子类。重要的是，在调用AbstractSecurityInterceptor时，如果主体身份已经验证通过，则SecurityContextHolder将包含有效的Authentication。
 
 AbstractSecurityInterceptor为处理安全对象请求提供了一致的工作流，通常为
 
-查找与本请求相关联的“配置属性”
-将安全对象，当前身份验证和配置属性提交给AccessDecisionManager进行授权决定
-可选地，更改发起调用的身份验证
-允许安全对象调用继续（假设访问被授予）
-一旦调用返回，调用AfterInvocationManager。如果调用引发异常，则不会调用AfterInvocationManager。
+1. 查找与本请求相关联的“配置属性”
+2. 将安全对象，当前Authentication和配置属性提交给AccessDecisionManager进行授权决策
+3. 可选地，更改发起调用的Authentication
+4. 允许安全对象调用继续（假设访问被授予）
+5. 一旦调用返回，继续调用AfterInvocationManager(如果配置了)。如果调用引发异常，则不会调用AfterInvocationManager。
 
+##### 什么是配置属性？
+“配置属性”可以被认为是对AbstractSecurityInterceptor类具有特殊含义的String。它们由框架内的接口ConfigAttribute表示。它们可能是简单的角色名称或具有更复杂的含义，这取决于AccessDecisionManager实现的复杂程度。AbstractSecurityInterceptor配置有一个SecurityMetadataSource，它用于查找安全对象的配置属性。通常这个配置将对用户来说是隐藏的。配置属性通常来源于安全方法上的注解或者受保护URL上的访问属性。例如，当我们在命名空间的介绍中看到类似<intercept-url pattern ='/secure/**' access ='ROLE_A，ROLE_B'/>的配置时，这就是匹配该模式的Web请求的配置属性是ROLE_A和ROLE_B。实际上，使用默认的AccessDecisionManager配置时，这表明只有当用户的GrantedAuthority属性与这两个配置属性相匹配时才允许用户访问。严格来说，它们只是属性，具体的访问决策取决于AccessDecisionManager的实现。使用前缀ROLE_是一个标记，用于指示这些属性是角色，应由Spring Security的RoleVoter使用。这仅在使用基于RoleVoter实现的AccessDecisionManager时才有用。我们将在授权章节中看到AccessDecisionManager的实现。
+##### RunAsManager
+假设AccessDecisionManager决定允许请求，那么AbstractSecurityInterceptor通常只会继续执行该请求。 话虽如此，在极少数情况下，用户可能希望使用由AccessDecisionManager调用RunAsManager处理的不同身份验证来替换SecurityContext内的Authentication。 这在相当不寻常的情况下可能是有用的，例如，如果Service层方法需要调用远程系统并呈现不同的身份。 因为Spring Security自动将安全身份从一个服务器传播到另一个服务器（假设您正在使用正确配置的RMI或HttpInvoker远程处理协议客户端），这可能很有用。（译者注：在某些情况下你可能会想替换保存在SecurityContext中的Authentication。这可以通过RunAsManager来实现的。在AbstractSecurityInterceptor的beforeInvocation()方法体中，在AccessDecisionManager鉴权成功后，将通过RunAsManager在现有Authentication基础上构建一个新的Authentication，如果新的Authentication不为空则将产生一个新的SecurityContext，并把新产生的Authentication存放在其中。这样在请求受保护资源时从SecurityContext中获取到的Authentication就是新产生的Authentication。待请求完成后会在finallyInvocation()中将原来的SecurityContext重新设置给SecurityContextHolder。AbstractSecurityInterceptor默认持有的是一个对RunAsManager进行空实现的NullRunAsManager。此外，Spring Security对RunAsManager有一个还有一个非空实现类RunAsManagerImpl，其在构造新的Authentication时是这样的逻辑：如果受保护对象对应的ConfigAttribute中拥有以“RUN_AS_”开头的配置属性，则在该属性前加上“ROLE_”，然后再把它作为一个GrantedAuthority赋给将要创建的Authentication（如ConfigAttribute中拥有一个“RUN_AS_ADMIN”的属性，则将构建一个“ROLE_RUN_AS_ADMIN”的GrantedAuthority），最后再利用原Authentication的principal、权限等信息构建一个新的Authentication进行返回；如果不存在任何以“RUN_AS_”开头的ConfigAttribute，则直接返回null。）
+##### AfterInvocationManager
+ 在请求受保护的对象完成以后，可以通过afterInvocation()方法对返回值进行修改。AbstractSecurityInterceptor把对返回值进行修改的控制权交给其所持有的AfterInvocationManager了。AfterInvocationManager可以选择对返回值进行修改、不修改或抛出异常（如：后置权限鉴定不通过）。 由于高度可插拔，AbstractSecurityInterceptor会将控件传递给AfterInvocationManager，以便在需要时实际修改该对象。 这个类甚至可以完全替换对象，也可以抛出异常，或者不以任何方式更改它。 后调用检查只有在调用成功时才会执行。 如果发生异常，将跳过附加检查。
+
+AbstractSecurityInterceptor及其相关对象如图9.1所示，Security interceptors 和"受保护对象"模型。
+
+<center>图 9.1. Security interceptors 和"受保护对象"模型</center>
+![](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/images/security-interception.png)
+
+##### 扩展受保护对象模型
+只有考虑采用全新方式拦截和授权请求的开发人员才需要直接操作受保护对象。 例如，可以构建一个新的受保护对象来保护对消息系统的调用。 任何需要被保护的资源都可以被列为受保护对象。 话虽如此，大多数Spring应用程序将简单地使用三个当前支持的受保护对象类型（AOP Alliance MethodInvocation，AspectJ JoinPoint和Web请求FilterInvocation）。
 ### 9.6 本地化
+Spring Security支持异常消息的本地化。如果您的应用程序是为英语用户设计的，那么您无需执行任何操作，因此默认情况下所有安全消息均为英文。如果您需要支持其他语言环境，则本节会告诉你如何设置。
+
+所有异常消息都可以进行本地化，包括与认证失败相关的消息和拒绝访问（授权失败）的异常消息。与开发人员或系统部署者的异常和日志记录消息（包括不正确的属性，违规接口违规，使用不正确的构造函数，启动时间验证，调试级日志记录）不会本地化，而是在Spring Security的代码中用英文硬编码。
+
+在spring-security-core-xx.jar包中，您将找到一个org.springframework.security包，该包又包含一个messages.properties文件，以及一些常用语言的本地化版本。这应该由您的ApplicationContext引用，因为Spring Security类实现了Spring的MessageSourceAware接口，并期望消息解析器在应用程序上下文启动时注入。通常您需要做的是在应用程序上下文中注册一个bean来引用消息。一个例子如下所示：
+
+```
+<bean id="messageSource"
+	class="org.springframework.context.support.ReloadableResourceBundleMessageSource">
+<property name="basename" value="classpath:org/springframework/security/messages"/>
+</bean>
+```
+messages.properties根据标准资源Bundle命名，并表示Spring Security消息支持的默认语言。此默认文件为英文。
+
+如果您希望自定义messages.properties文件或支持其他语言，则应该复制该文件，并相应地重命名，并将其注册到上述bean定义中。这个文件中没有大量的消息密钥，所以本地化不应该被认为是主要的。如果您确实执行此文件的本地化，请考虑通过记录JIRA任务并附加适当命名的本地化版本的messages.properties来与社区共享您的工作。
+
+Spring Security依赖于Spring的本地化支持，以便查找相应的消息。为了使其工作，您必须确保请求的区域设置存储在Spring的org.springframework.context.i18n.LocaleContextHolder中。 Spring MVC的DispatcherServlet自动为您的应用程序执行此操作，但是由于Spring Security的过滤器在此之前被调用，因此LocaleContextHolder需要设置为在调用过滤器之前包含正确的区域设置。你可以自己做一个过滤器（它必须在web.xml中的Spring Security过滤器之前），或者你可以使用Spring的RequestContextFilter。有关使用Spring进行本地化的更多详细信息，请参阅Spring Framework文档。
+
+“contacts”示例应用程序设置为使用本地化消息。
+## 10 核心服务
+现在我们对Spring Security架构及其核心类进行了高级的概述，我们来仔细研究一两个核心接口及其实现，特别是AuthenticationManager，UserDetailsService和AccessDecisionManager。 这些类在该文档的其他部分还会经常出现，因此，首先要知道它们的配置及其操作方式。
+10.1 AuthenticationManager, ProviderManager和AuthenticationProvider
