@@ -329,5 +329,48 @@ Spring Security依赖于Spring的本地化支持，以便查找相应的消息�
 
 “contacts”示例应用程序设置为使用本地化消息。
 ## 10 核心服务
-现在我们对Spring Security架构及其核心类进行了高级的概述，我们来仔细研究一两个核心接口及其实现，特别是AuthenticationManager，UserDetailsService和AccessDecisionManager。 这些类在该文档的其他部分还会经常出现，因此，首先要知道它们的配置及其操作方式。
-10.1 AuthenticationManager, ProviderManager和AuthenticationProvider
+现在我们对Spring Security架构及其核心类进行了高级的概述，接下来我们仔细研究一两个核心接口及其实现类，特别是AuthenticationManager，UserDetailsService和AccessDecisionManager。 这些类在该文档的其他部分还会经常出现，因此，首先要知道它们的配置及其操作方式。
+### 10.1 AuthenticationManager, ProviderManager和AuthenticationProvider
+
+AuthenticationManager只是一个接口，因此我们可以根据自己的业务逻辑自由来实现，但它在实践中是如何工作的呢？如果我们需要检查多个身份验证数据库或不同身份验证服务（如数据库和LDAP服务器）的组合，该怎么办？
+
+在Spring Security中，AuthenticationManager的默认实现是ProviderManager，ProviderManager本身并不处理身份验证请求，它将身份认证委托给已配置的AuthenticationProvider的列表，在进行身份认证时会遍历AuthenticationProvider列表，以查看是否可以执行身份验证。每个AuthenticationProvider将抛出异常或返回完全填充的Authentication对象。还记得我们的好朋友，UserDetails和UserDetailsS​​ervice？如果没有，回到上一章，强化一下你的记忆。执行身份验证的最常见方法是加载相应的UserDetails，并检查用户输入的密码和加载的密码是否一致。DaoAuthenticationProvider就使用这种认证方法（见下文）。当构建完全填充的Authentication对象（从成功的认证返回并存储在SecurityContext中）时，将使用加载的UserDetails对象（特别是包含的GrantedAuthority）。
+
+如果使用Spring Security命名空间配置，则Spring Security会在内部创建和维护ProviderManager实例，并通过使用命名空间认证提供程序元素（请参阅[命名空间章节](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#ns-auth-manager)）向其添加提供程序。在这种情况下，您不应该在应用程序上下文中声明一个ProviderManager bean。但是，如果您不使用命名空间，则可以这样声明：
+
+```
+<bean id="authenticationManager"
+		class="org.springframework.security.authentication.ProviderManager">
+	<constructor-arg>
+		<list>
+			<ref local="daoAuthenticationProvider"/>
+			<ref local="anonymousAuthenticationProvider"/>
+			<ref local="ldapAuthenticationProvider"/>
+		</list>
+	</constructor-arg>
+</bean>
+```
+
+在上面的例子中，我们配置了三个认证提供者。它们按照配置的顺序以此进行身份认证（这通过使用列表来表示），每个提供者都可以尝试身份验证，或者通过简单地返回null来跳过身份验证。如果所有的认证提供者都返回null，那么ProviderManager将抛出一个ProviderNotFoundException异常。如果您有兴趣了解有关认证提供者链的更多信息，请参阅ProviderManager Javadoc。
+
+例如，在基于Web表单登录的认证机制中，处理认证过程过滤器引用了ProviderManager实例，并通过ProviderManager实例处理其身份验证请求。身份认证提供者有时可以与身份验证机制互换，而在其他情况下，它将取决于特定的身份验证机制。例如，DaoAuthenticationProvider和LdapAuthenticationProvider与简单的任何基于用户名/密码的认证机制兼容，因此可以使用基于表单的登录或HTTP Basic身份验证。另一方面，一些认证机制创建一个认证请求对象，该对象只能由一种类型的AuthenticationProvider来解释。典型的例子是JA-SIG CAS，它使用服务票据的概念，因此只能由一个CasAuthenticationProvider进行身份验证。您不必太在意这一点，因为如果您忘记注册一个合适的认证提供者，则当尝试进行身份验证时，您将收到一个ProviderNotFoundException异常。
+
+##### 10.1.1 认证成功时清楚凭证
+
+默认情况下（从Spring Security 3.1开始），ProviderManager将尝试从认证对象中清除成功认证请求返回的任何敏感凭证信息。这样可以防止密码被长期保留。
+
+当您使用用户对象缓存时，可能会导致问题，例如无法改善无状态应用程序的性能。如果身份验证包含对缓存中对象的引用（例如UserDetails实例），并删除其凭据，则将无法再对缓存的值进行身份验证。如果您正在使用缓存，则需要考虑这一点。一个明显的解决方案是首先创建对象的副本，无论是在缓存实现中还是在创建返回的Authentication对象的AuthenticationProvider中。或者，您可以禁用ProviderManager上的eraseCredentialsAfterAuthentication属性。有关更多信息，请参阅Javadoc。
+#### 10.1.2 DaoAuthenticationProvider
+
+Spring Security提供的最简单的AuthenticationProvider实现是DaoAuthenticationProvider，它也是框架最早支持的。 它利用UserDetailsService（作为DAO）来查找用户名，密码和GrantedAuthority。 它只需通过将UsernamePasswordAuthenticationToken中提交的密码与UserDetailsService加载的密码进行比较即可对用户进行身份验证。 配置提供程序很简单：
+
+```
+<bean id="daoAuthenticationProvider"
+	class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
+<property name="userDetailsService" ref="inMemoryDaoImpl"/>
+<property name="passwordEncoder" ref="passwordEncoder"/>
+</bean>
+```
+PasswordEncoder是可选的。 PasswordEncoder提供从配置的UserDetailsService返回的UserDetails对象中显示的密码的编码和解码。 这将在[下面](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#core-services-password-encoding)更详细地讨论。
+
+## 10.2 UserDetailsService实现
