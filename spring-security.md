@@ -18,6 +18,17 @@ Copies of this document may be made for your own use and for distribution to oth
 ## 6.Security命名空间配置
 ## 7.示例应用
 ## 8.Spring Security社区
+### 8.1 问题跟踪
+Spring Security使用JIRA来管理bug报告和增强请求。 如果您发现bug，请使用JIRA登录报告。 不要在支持论坛，邮件列表或通过电子邮件将bug发送给项目的开发人员。 这种方法不正规，我们更喜欢使用正规的方式来管理bug。
+
+如果可能，在您的bug报告中，请提供一个JUnit测试，证明任何不正确的行为。 或者，更好的是提供一个修正问题的修补程序。 同样地，尽管我们只接受增强请求，但如果您包含相应的单元测试，欢迎更新增强功能。 这对于确保项目测试覆盖率是必要的。
+
+您可以访问[https://github.com/spring-projects/spring-security/issues](https://github.com/spring-projects/spring-security/issues)上的问题跟踪器。
+
+### 8.2 参与Spring Security项目
+我们欢迎您参与Spring Security项目。 有很多方式可以为该项目做出贡献，包括阅读论坛和回答别人的问题，编写新的代码，改进现有的代码，协助文档编制，开发示例或教程，或者只是提出建议。
+### 8.3 更多信息
+欢迎提出有关Spring Security的问题和意见。 您可以使用Spring Over Stack网站[http://spring.io/questions](http://spring.io/questions)与框架的其他用户讨论Spring Security。 请记住使用JIRA进行bug报告，如上所述。
 # II.架构与实施
 ## 9.技术概述
 ### 9.1 运行时环境
@@ -49,6 +60,7 @@ Copies of this document may be made for your own use and for distribution to oth
 ## 16.Basic和Digest认证
 ## 17.Remember-Me认证
 ## 18.跨站请求伪造（CSRF）
+### 18.1 什么是CSRF
 ## 19.CORS
 ## 20.Security Http响应头
 ## 21.Session管理
@@ -373,4 +385,662 @@ Spring Security提供的最简单的AuthenticationProvider实现是DaoAuthentica
 ```
 PasswordEncoder是可选的。 PasswordEncoder提供从配置的UserDetailsService返回的UserDetails对象中显示的密码的编码和解码。 这将在[下面](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#core-services-password-encoding)更详细地讨论。
 
-## 10.2 UserDetailsService实现
+### 10.2 UserDetailsService实现
+
+如本参考指南中前面提到的，大多数认证提供者都使用UserDetails和UserDetailsService接口。 回想一下，UserDetailsService接口的定义，该接口只有唯一的一个方法：
+
+```
+UserDetails loadUserByUsername(String username) throws UsernameNotFoundException;
+```
+该方法的返回值UserDetails是一个接口，它提供了验证用户名是否激活的方法以及对用户名，密码，授予用户的权限等属性的getter方法。 大多数认证提供者将使用UserDetailsService，即使用户名和密码实际上不被用作身份验证决策的一部分。 由于某些其他系统（如LDAP或X.509或CAS等）承担了实际身份认证的责任，这时loadUserByUsername返回的UserDetails对象对于该系统来说，只是为了使用其包含的GrantedAuthority信息。
+
+UserDetailsService的实现是非常简单的，用户可以根据自己的持久性策略很容易地检索身份验证信息。 话虽如此，Spring Security确实为UserDetailsService提供了一些有用的基础实现，下面我们来看一下。
+#### 10.2.1 In-Memory Authentication
+
+创建一个自定义的UserDetailsService实现，从选择的持久性引擎中提取信息，这是很实用的，但是许多应用程序不需要这么复杂。 如果您正在构建原型应用程序或刚刚开始集成Spring Security，当您不想花时间配置数据库或编写UserDetailsService实现时，一个简单的选择是使用Security命名空间中的user-service元素：
+
+```
+<user-service id="userDetailsService">
+<user name="jimi" password="jimispassword" authorities="ROLE_USER, ROLE_ADMIN" />
+<user name="bob" password="bobspassword" authorities="ROLE_USER" />
+</user-service>
+```
+
+这也可以使用外部属性文件配置：
+
+```
+<user-service id="userDetailsService" properties="users.properties"/>
+```
+属性文件中的配置格式如下：
+
+```
+username=password,grantedAuthority[,grantedAuthority][,enabled|disabled]
+```
+例如如下的属性配置文件：
+
+```
+jimi=jimispassword,ROLE_USER,ROLE_ADMIN,enabled
+bob=bobspassword,ROLE_USER,enabled
+```
+
+#### 10.2.2 JdbcDaoImpl
+Spring Security还提供了从JDBC数据源获取认证信息的UserDetailsService实现。 在Spring Security内部使用的是Spring的JDBC数据源，因此，它避免了使用ORM框架来存储单一用户信息的复杂性。 如果您的应用程序使用ORM工具，您可能更愿意编写一个自定义UserDetailsService来重用已经创建的映射文件。 关于JdbcDaoImpl的示例配置如下所示：
+
+```
+<bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+<property name="driverClassName" value="org.hsqldb.jdbcDriver"/>
+<property name="url" value="jdbc:hsqldb:hsql://localhost:9001"/>
+<property name="username" value="sa"/>
+<property name="password" value=""/>
+</bean>
+
+<bean id="userDetailsService"
+	class="org.springframework.security.core.userdetails.jdbc.JdbcDaoImpl">
+<property name="dataSource" ref="dataSource"/>
+</bean>
+```
+您可以通过修改上述DriverManagerDataSource来使用不同的关系数据库管理系统。 您也可以从JNDI获得的全局数据源，这与其他任何Spring配置一样。
+
+##### 权限组
+
+默认情况下，JdbcDaoImpl加载单个用户的权限，假设权限直接映射到用户（参见[数据库模式附录](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#appendix-schema)）。 另一种方法是将权限划分为组，并将组分配给用户。 有些人喜欢这种方式，是管理用户权限的一种手段。 有关如何启用权限组的更多信息，请参阅JdbcDaoImpl Javadoc。 组织架构也包含在附录中。
+### 10.3 密码编码
+Spring Security的PasswordEncoder接口用于以某种方式编码密码然后在存储到数据库中。密码不应该以明文形式存储。密码在存储时必须使用bcrypt等单向密码散列算法进行编码，bcrypt算法使用内置的不同的盐值来进行编码。密码编码时最好不要使用简单的哈希函数，如MD5或SHA，甚至是加盐版本的MD5和SHA。 Bcrypt故意设计为缓慢，并阻止离线密码破解，而标准散列算法快速，可以轻松地用用穷举算法进行破解。您可能认为这并不会影响你，因为您的密码数据库是安全的，脱机攻击并不是风险。如果你有这种想法，那么请进行一些研究，并阅读所有以这种方式受到妥协的高调网站，并为保护密码不安全而被劫持。使用org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder“是保护密码安全的一个不错的选择，它还有其他常用编程语言中的兼容实现，因此它也是跨平台密码加密的最佳选择。
+
+如果您的系统是使用散列算法加密密码的遗留系统，那么您将需要使用与当前算法相匹配的编码器，至少直到您将用户迁移到更安全的方案（通常这将涉及要求用户设置一个新的密码，因为哈希是不可逆转的）。 Spring Security具有包含传统密码编码实现的包，即org.springframework.security.authentication.encoding。 DaoAuthenticationProvider可以注册新的或旧的PasswordEncoder类型。
+#### 10.3.1 什么是hash?
+密码散列不是Spring Security所特有的，但对于不熟悉概念的用户来说，这是一个常见的混淆策略。 散列（或摘要）算法是一种单向函数，它从一些输入数据（如密码）产生一段固定长度的输出数据（散列）。 例如，字符串“password”（十六进制）的MD5哈希值是：
+
+```
+5f4dcc3b5aa765d61d8327deb882cf99
+```
+从某种意义上说，散列是“单向的”，即在给定散列值的情况下获得原始输入，或者甚至可能产生该散列值的任何可能的输入都是非常困难的（实际上是不可能的）。 这个特性使哈希值对于身份验证非常有用。 它们可以存储在您的用户数据库中，作为明文密码的替身，即使这些值受到威胁，也不会立即显示可用于登录的密码。 请注意，这也意味着您无法在编码密码后恢复密码。
+#### 10.3.2 加盐后Hash
+密码被哈希后的一个潜在问题是，如果使用通用单词作为原始密码输入，则相对容易破解哈希值。人们倾向于选择类似的密码，从以前被黑客攻击的网站上可以获得这些密码的巨大字典。例如，如果您使用谷歌搜索哈希值5f4dcc3b5aa765d61d8327deb882cf99，您将很快找到原始单词“password”。以类似的方式，攻击者可以从标准单词列表中构建散列词典，并使用它来查找原始密码。为了防止这种情况的发生，一种有效的方法是采用具有适当强度的密码策略，以防止使用常用单词时被暴力破解。另一个是在计算哈希时使用“盐”。这是在计算哈希之前与每个用户的一个额外的一串已知数据与密码相结合，然后在省城Hash值。理想情况下，数据应尽可能随机，但实际上任何盐值通常都比无盐值的安全性高。使用盐意味着攻击者必须为每个盐值构建一个单独的哈希字典，从而使攻击更加复杂（但这也不是不可能破解）。
+
+Bcrypt在编码时自动为每个密码生成随机盐值，并以标准格式将其存储在bcrypt字符串中。
+### 10.4 Jackson支持
+
+Spring Security已经添加了Jackson支持，方便Spring Security持久化相关类使用。 在使用分布式Session（即session复制，Spring  Session等）时，序列化Spring Security相关类的性能会得到改善。
+
+要使用Jackson，请将JacksonJacksonModules.getModules（ClassLoader）注册为Jackson模块。
+
+
+# IV. Web应用安全
+大多数用户在使用HTTP和Servlet API的应用程序中使用Spring Security框架。 在本部分中，我们将介绍Spring Security如何为应用程序的Web层提供身份验证和访问控制功能。 我们将会解释Spring Security命名空间的底层实现原理，并查看哪些类和接口用来实现Web层安全性。 在某些情况下，有必要使用传统的bean配置来完全控制配置，因此我们还将看到如何直接配置这些类而不使用命名空间。
+## 13 Spring Security过滤器链
+Spring Security在的Web层的基础设施完全基于标准的servlet过滤器来实现。Spring Security内部不使用servlet或任何其他基于servlet的框架（如Spring MVC），因此它没有对任何特定的Web技术产生较强的依赖。Spring Security在处理HttpServletRequest和HttpServletResponse时，并且不关心请求是来自浏览器，Web Service客户端，HttpInvoker还是AJAX应用程序。
+
+Spring Security在内部维护一个过滤器链，其中每个过滤器都有特定的责任，根据需要哪些服务，从配置中添加或删除过滤器。过滤器的顺序很重要，因为它们之间有依赖关系。如果您已经使用命名空间配置，那么过滤器将自动为您配置，并且您不必明确定义任何Spring bean。如果您希望对Security过滤器链进行完全控制，或者您正在使用的功能在命名空间中不受支持，或者您正在使用自己的定制类，Spring Security支持自定义Bean配置。
+### 13.1 DelegatingFilterProxy
+当使用servlet过滤器时，您显然需要在web.xml中声明它们，否则它们将被servlet容器忽略。 在Spring Security中，过滤器类也是在应用程序上下文中定义的Spring bean，因此可以利用Spring丰富的依赖注入功能和生命周期接口。 Spring的DelegatingFilterProxy提供了web.xml和应用程序上下文之间的链接。
+
+当使用DelegatingFilterProxy时，您将在web.xml文件中看到如下所示的内容：
+
+```
+<filter>
+<filter-name>myFilter</filter-name>
+<filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+</filter>
+
+<filter-mapping>
+<filter-name>myFilter</filter-name>
+<url-pattern>/*</url-pattern>
+</filter-mapping>
+```
+请注意，过滤器实际上是一个DelegatingFilterProxy，而不是实际实现过滤器逻辑的类。 DelegatingFilterProxy所做的是将Filter的方法委托给从Spring应用程序上下文获取的bean。 这使得Bean可以支持Spring Web应用程序上下文生命周期和灵活的配置。这些bean必须实现javax.servlet.Filter接口，它必须与filter-name元素中的名称相同。 有关详细信息，请阅读DelegatedFilterProxy的Javadoc。
+
+### 13.2 FilterChainProxy
+Spring Security的Web基础组件只能通过委派给FilterChainProxy的实例来使用。Security过滤器不应该独立使用。 理论上，您可以在应用程序上下文中声明所需的每个Spring Security过滤器bean，并为每个过滤器添加一个相应的DelegatingFilterProxy到web.xml，并且要确保每个过滤器的正确排序，但这样做是很麻烦的 如果你有很多过滤器，会使web.xml文件变得很凌乱。 FilterChainProxy允许我们在web.xml中只需添加一个配置项，并完全处理用于管理Web安全性bean的应用程序上下文文件。 它使用DelegatingFilterProxy进行连接，就像上面的示例一样，但是filter-name设置为bean的名称“filterChainProxy”。 然后在应用程序上下文中使用相同的bean名称声明过滤器链。 这里有一个例子：
+
+
+```
+<bean id="filterChainProxy" class="org.springframework.security.web.FilterChainProxy">
+<constructor-arg>
+	<list>
+	<sec:filter-chain pattern="/restful/**" filters="
+		securityContextPersistenceFilterWithASCFalse,
+		basicAuthenticationFilter,
+		exceptionTranslationFilter,
+		filterSecurityInterceptor" />
+	<sec:filter-chain pattern="/**" filters="
+		securityContextPersistenceFilterWithASCTrue,
+		formLoginFilter,
+		exceptionTranslationFilter,
+		filterSecurityInterceptor" />
+	</list>
+</constructor-arg>
+</bean>
+```
+filter-chain命名空间元素用于方便设置应用程序中所需的安全过滤器链<sup>[6]</sup>。它将特定的URL模式映射到从filter元素指定的过滤器列表，并将它们组合到SecurityFilterChain类型的bean中。 pattern属性采用Ant路径，最特定的URI应该配置在最前面<sup>[7]</sup>。在运行时，FilterChainProxy将定位与当前Web请求相匹配的第一个URI模式，并且由filters属性指定的过滤器bean列表将应用于该请求。过滤器将按照定义的顺序进行调用，因此您可以完全控制应用于特定URL的过滤器链。
+
+您可能已经注意到我们已经在过滤器链中声明了两个SecurityContextPersistenceFilter（ASC是allowSessionCreation的简称，SecurityContextPersistenceFilter的一个属性）。由于Web服务将不会在未来的请求中显示jsessionid，因此为这些用户代理创建HttpSession将 是浪费的。如果您有一个需要最大可扩展性的大容量应用程序，我们建议您使用上述方法。对于较小的应用程序，使用单个SecurityContextPersistenceFilter（其默认的allowSessionCreation为true）可能就足够了。
+
+请注意，FilterChainProxy不会在配置的过滤器上调用标准过滤器生命周期方法。我们建议您使用Spring的应用程序上下文生命周期接口作为替代方法，就像任何其他Spring bean一样。
+
+当我们查看如何使用命名空间配置设置Web安全性时，我们使用了一个名为“springSecurityFilterChain”的DelegatingFilterProxy。您现在应该可以看到这是由命名空间创建的FilterChainProxy的名称。
+
+#### 13.2.1 绕过过滤器链
+
+您可以使用属性filters =“none”作为过滤器bean列表的替代方法。 这将完全从安全过滤器链中省略请求模式。 请注意，与此路径匹配的任何内容将不会被应用任何身份验证或授权服务，并且可以随意访问。 如果要在请求期间利用SecurityContext的内容，则必须通过安全过滤器链。 否则SecurityContextHolder将不会被填充，内容将为null。
+### 13.3过滤器顺序
+
+过滤器在链中定义的顺序非常重要。无论您实际使用哪个过滤器，顺序应如下所示：
+
+* ChannelProcessingFilter，因为它可能需要重定向到一个不同的协议
+* SecurityContextPersistenceFilter，所以SecurityContext可以在Web请求开头的SecurityContextHolder中进行设置，当Web请求结束时，可以将SecurityContext的任何更改复制到HttpSession（准备用于下一个Web请求）
+* ConcurrentSessionFilter，因为它使用SecurityContextHolder功能，需要更新SessionRegistry以反映主体的持续请求
+* 身份验证处理机制 - UsernamePasswordAuthenticationFilter，CasAuthenticationFilter，BasicAuthenticationFilter等 - 以便SecurityContextHolder可以修改为包含有效的身份验证请求令牌
+* SecurityContextHolderAwareRequestFilter，如果你正在使用它来安装一个Spring Security感知的HttpServletRequestWrapper到你的servlet容器
+* JaasApiIntegrationFilter，如果JaasAuthenticationToken在SecurityContextHolder中，那么将将FilterChain作为JaasAuthenticationToken中的Subject处理
+* RememberMeAuthenticationFilter，所以如果没有更早的认证处理机制更新了SecurityContextHolder，并且该请求提供了一个能够记住我的服务的cookie，那么一个合适的记住的Authentication对象将被放在那里
+* AnonymousAuthenticationFilter，所以如果没有更早的认证处理机制更新了SecurityContextHolder，一个匿名认证对象将被放在那里
+* ExceptionTranslationFilter，捕获任何Spring Security异常，以便可以返回HTTP错误响应或者可以启动适当的AuthenticationEntryPoint
+* FilterSecurityInterceptor，用于在访问被拒绝时保护Web URI并引发异常
+
+
+### 13.4 请求匹配和HttpFirewall
+Spring Security有几个区域，您定义的模式针对传入的请求进行测试，以便决定如何处理该请求。当FilterChainProxy决定应该传递一个请求的过滤器链以及FilterSecurityInterceptor决定哪个安全约束适用于一个请求时，会发生这种情况。了解什么是机制，以及在使用定义的模式进行测试时使用的URL值很重要。
+
+Servlet规范定义了可通过getter方法访问的HttpServletRequest的几个属性，以及我们可能需要匹配的属性。这些是contextPath，servletPath，pathInfo和queryString。 Spring Security仅对在应用程序中保护路径感兴趣，因此将忽略contextPath。不幸的是，servlet规范没有准确定义特定请求URI的servletPath和pathInfo的值将包含什么。例如，URL的每个路径段可以包含RFC 2396 [8]中定义的参数。规范不明确说明这些是否应包含在servletPath和pathInfo值中，并且行为在不同的servlet容器之间变化。存在将应用程序部署在不从这些值中剥离路径参数的容器中的危险时，攻击者可以将它们添加到请求的URL中，以使模式匹配成功或意外失败。 [9]。传入URL中的其他变体也是可以的。例如，它可以包含路径遍历序列（如/../）或多个正斜杠（//），这也可能导致模式匹配失败。在执行servlet映射之前，有些容器对这些进行规范化，但是其他容器则没有。为了防止这些问题，FilterChainProxy使用HttpFirewall策略来检查和包装请求。默认情况下，自动拒绝未归一化的请求，为了匹配目的，将删除路径参数和重复斜杠。 [10]。因此，必须使用FilterChainProxy来管理安全过滤器链。请注意，servletPath和pathInfo值由容器解码，因此您的应用程序不应具有包含分号的任何有效路径，因为这些部分将被删除以进行匹配。
+
+如上所述，默认策略是使用Ant样式路径进行匹配，这可能是大多数用户的最佳选择。该策略是在AntPathRequestMatcher类中实现的，它使用Spring的AntPathMatcher来执行模式对连接的servletPath和pathInfo的不区分大小写的匹配，忽略了queryString。
+
+如果由于某种原因，您需要一个更强大的匹配策略，您可以使用正则表达式。策略实现就是RegexRequestMatcher。有关更多信息，请参阅此类的Javadoc。
+
+实际上，我们建议您在服务层使用方法安全性，以控制对应用程序的访问，并且不完全依赖于在Web应用程序级别定义的安全约束的使用。 URL更改，很难考虑应用程序可能支持的所有可能的URL以及请求如何被操纵。您应该尝试限制自己使用一些简单易懂的简单蚂蚁路径。始终尝试使用“deny-by-default”方法，其中最后定义了所有通配符（/或），并拒绝访问。
+
+在服务层定义的安全性更强大，更难绕过，所以您应该始终利用Spring Security的方法安全性选项。
+
+### 13.5 与其他基于过滤器的框架一起使用
+如果您正在使用一些其他基于过滤器的框架，那么您需要确保Spring Security过滤器处于第一位。 这使SecurityContextHolder能够及时填写，以供其他过滤器使用。 示例是使用SiteMesh来装饰您的网页或Web框架，例如使用过滤器来处理其请求的Wicket。
+
+### 13.6高级命名空间配置
+正如我们前面在命名空间章节中看到的那样，可以使用多个http元素为不同的URL模式定义不同的安全配置。 每个元素在内部FilterChainProxy和应该映射到它的URL模式之间创建一个过滤器链。 元素将按照声明的顺序添加，因此必须首先声明最具体的模式。 这是另一个例子，对于类似于上述情况，应用程序支持无状态RESTful API以及用户使用表单登录的普通Web应用程序。
+
+```
+<!-- Stateless RESTful service using Basic authentication -->
+<http pattern="/restful/**" create-session="stateless">
+<intercept-url pattern='/**' access="hasRole('REMOTE')" />
+<http-basic />
+</http>
+
+<!-- Empty filter chain for the login page -->
+<http pattern="/login.htm*" security="none"/>
+
+<!-- Additional filter chain for normal users, matching all other requests -->
+<http>
+<intercept-url pattern='/**' access="hasRole('USER')" />
+<form-login login-page='/login.htm' default-target-url="/home.htm"/>
+<logout />
+</http>
+```
+
+[6]请注意，您需要将安全名称空间包含在应用程序上下文XML文件中才能使用此语法。 仍然支持使用过滤器链映射的较旧语法，但不建议使用构造函数注入。
+
+[7]代替路径模式，request-matcher-ref属性可以用于指定一个RequestMatcher实例，用于更强大的匹配
+
+[8]当浏览器不支持cookies并且在分号后面将jsessionid参数附加到URL时，您可能已经看到了这一点。 然而，RFC允许在URL的任何路径段中存在这些参数
+
+[9]一旦请求离开FilterChainProxy，原始值将被返回，因此，应用程序仍然可用。
+
+[10]因此，例如，原始请求路径/secure;hack=1/somefile.html;hack=2将作为/secure/somefile.html返回。
+
+## 14 核心过滤器
+
+有一些关键的过滤器将始终应用于基于Spring Security的Web应用程序中，因此我们首先查看这些过滤器类及其支持类和接口。 我们不会涵盖每个功能，如果你想了解每个类的详细信息，请查看对应的Javadoc。
+
+### 14.1 FilterSecurityInterceptor
+
+## 15. Spring Security与Servlet API集成
+本节介绍Spring Security如何与Servlet API集成。 servletapi-xml示例应用程序演示了每种方法的用法。
+### 15.1 Spring Security与Servlet 2.5+集成
+#### 15.1.1 HttpServletRequest.getRemoteUser()
+
+HttpServletRequest.getRemoteUser（）将返回当前用户名，即SecurityContextHolder.getContext().getAuthentication().getName()的结果。 如果要在应用程序中显示当前用户名，这可能很有用。 另外，还可以通过该方法检查用户名是否为空以此来判断用户是否已经验证通过。 判断用户是否被认证可用于确定是否应该在页面上显示某些UI元素（即，仅当用户被认证时才应该显示注销链接）。
+#### 15.1.2 HttpServletRequest.getUserPrincipal()
+HttpServletRequest.getUserPrincipal()将返回SecurityContextHolder.getContext().getAuthentication（）的结果。 这意味着它是一个身份验证，当使用用户名和密码进行身份验证时，该方法将返回UsernamePasswordAuthenticationToken的一个实例。 如果您需要有关用户的其他信息，这将非常有用。 例如，您可能已经创建了一个自定义的UserDetailsService，它返回一个包含用户姓氏和名字的自定义UserDetails。 您可以使用以下信息获取此信息：
+
+```
+Authentication auth = httpServletRequest.getUserPrincipal();
+// assume integrated custom UserDetails called MyCustomUserDetails
+// by default, typically instance of UserDetails
+MyCustomUserDetails userDetails = (MyCustomUserDetails) auth.getPrincipal();
+String firstName = userDetails.getFirstName();
+String lastName = userDetails.getLastName();
+```
+
+> 应该注意的是，在整个应用程序中执行这么多的逻辑通常是不好的做法。 相反，应该集中它来减少Spring Security和Servlet API的任何耦合。
+
+#### 15.1.3 HttpServletRequest.isUserInRole(String)
+
+HttpServletRequest.isUserInRole（String）将确定SecurityContextHolder.getContext().getAuthentication().getAuthorities()是否包含GrantedAuthority，该角色传递到isUserInRole（String）。 通常，用户不能自动添加“ROLE_”前缀到此方法中。 例如，如果要确定当前用户是否具有“ROLE_ADMIN”权限，则可以使用以下命令：
+
+```
+boolean isAdmin = httpServletRequest.isUserInRole("ADMIN");
+```
+这可能有助于确定是否应该显示某些UI组件。 例如，只有当前用户是管理员时，才可能显示管理员链接。
+
+### 15.2 Spring Security与Servlet 3+ 的集成
+以下部分将介绍Spring Security与Servlet 3的集成。
+#### 15.2.1 HttpServletRequest.authenticate(HttpServletRequest,HttpServletResponse)
+可以使用HttpServletRequest.authenticate(HttpServletRequest，HttpServletResponse)方法来确保用户被认证。 如果未通过身份验证，则配置的AuthenticationEntryPoint将请求用户进行身份验证（即重定向到登录页面）。
+#### 15.2.2 HttpServletRequest.login(String,String)
+HttpServletRequest.login(String,String)方法用于使用当前的AuthenticationManager来验证用户。 例如，以下将尝试使用用户名“user”和密码“password”进行身份验证：
+
+```
+try {
+httpServletRequest.login("user","password");
+} catch(ServletException e) {
+// fail to authenticate
+}
+```
+> 如果您希望Spring Security处理身份验证失败的异常，则无需捕获ServletException。
+
+#### 15.2.3 HttpServletRequest.logout()
+
+HttpServletRequest.logout()方法可以用来退出当前用户。
+
+通常这意味着SecurityContextHolder将被清除，HttpSession将无效，任何“记住我”的身份验证信息将被清除等。但是，配置的LogoutHandler实现将根据您的Spring Security配置而有所不同。 要注意，在HttpServletRequest.logout()被调用之后，你仍然负责写一个响应。 通常这将涉及重定向到欢迎页面。
+
+#### 15.2.4 AsyncContext.start(Runnable)
+
+[AsyncContext.start(Runnable)](http://docs.oracle.com/javaee/6/api/javax/servlet/AsyncContext.html)方法确保将您的认证凭据传播到新的线程。 当使用Spring Security的并发支持时，Spring Security会覆盖AsyncContext.start(Runnable)，以确保在处理Runnable时使用当前的SecurityContext。 例如，以下将输出当前用户的身份验证：
+
+```
+final AsyncContext async = httpServletRequest.startAsync();
+async.start(new Runnable() {
+	public void run() {
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+		try {
+			final HttpServletResponse asyncResponse = (HttpServletResponse) async.getResponse();
+			asyncResponse.setStatus(HttpServletResponse.SC_OK);
+			asyncResponse.getWriter().write(String.valueOf(authentication));
+			async.complete();
+		} catch(Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+});
+```
+#### 15.2.5 Async Servlet支持
+
+如果您使用的是基于Java的配置，那么您已经准备好了。 如果您正在使用XML配置，则需要进行一些更新。 第一步是确保您更新了web.xml以至少使用3.0模式，如下所示：
+
+```
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd"
+version="3.0">
+
+</web-app>
+```
+接下来，您需要确保您的springSecurityFilterChain被设置为处理异步请求。
+
+```
+<filter>
+<filter-name>springSecurityFilterChain</filter-name>
+<filter-class>
+	org.springframework.web.filter.DelegatingFilterProxy
+</filter-class>
+<async-supported>true</async-supported>
+</filter>
+<filter-mapping>
+<filter-name>springSecurityFilterChain</filter-name>
+<url-pattern>/*</url-pattern>
+<dispatcher>REQUEST</dispatcher>
+<dispatcher>ASYNC</dispatcher>
+</filter-mapping>
+```
+配置完成！ 现在，Spring Security将确保您的SecurityContext也在异步请求上传播。
+
+那么它如何工作呢？ 如果您没有真正的兴趣，请跳过本节的其余部分，否则请继续阅读。 大多数内置于Servlet规范中，但是Spring Security有一些调整可以确保正确使用异步请求。 在Spring Security 3.2之前，一旦提交了HttpServletResponse，SecurityContextHolder的SecurityContext就会自动保存。 这可能会导致异步环境中的问题。 例如，考虑以下几点：
+
+```
+httpServletRequest.startAsync();
+new Thread("AsyncThread") {
+	@Override
+	public void run() {
+		try {
+			// Do work
+			TimeUnit.SECONDS.sleep(1);
+
+			// Write to and commit the httpServletResponse
+			httpServletResponse.getOutputStream().flush();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+}.start();
+```
+
+问题是Spring线程不知道这个Thread，所以SecurityContext不会传播给它。 这意味着当我们提交HttpServletResponse时，没有SecuriytContext。 当Spring Security自动将SecurityContext保存在提交HttpServletResponse上时，将丢失我们登录的用户。
+
+自3.2版本以来，Spring Security非常聪明，因为一旦HttpServletRequest.startAsync（）被调用，就不再自动保存SecurityContext来提交HttpServletResponse。
+
+### 15.3 Servlet 3.1+ Integration
+
+以下部分将介绍Spring Security集成的Servlet 3.1方法。
+#### 15.3.1 HttpServletRequest#changeSessionId()
+
+HttpServletRequest.changeSessionId（）是在Servlet 3.1及更高版本中防止会话修复攻击的默认方法。
+
+## 18.跨站请求伪造（CSRF）
+本章研究 Spring Security对CSRF的支持
+### 18.1 什么是CSRF
+在研究Spring Security对CSRF支持之前，让我们先来了解一下CSRF的概念。我们将通过一个具体的例子来阐述CSRF的概念。
+假如你的银行站点支持当前登录用户通表单的方式来进行转账。例如，HTTP请求如下：
+
+```
+POST /transfer HTTP/1.1
+Host: bank.example.com
+Cookie: JSESSIONID=randomid; Domain=bank.example.com; Secure; HttpOnly
+Content-Type: application/x-www-form-urlencoded
+
+amount=100.00&routingNumber=1234&account=9876
+```
+现在假设你已经成功登陆你的银行网站，然后，在不退出的情况下访问一个恶意网站。 恶意网站包含一个HTML页面，其格式如下：
+
+```
+<form action="https://bank.example.com/transfer" method="post">
+<input type="hidden"
+	name="amount"
+	value="100.00"/>
+<input type="hidden"
+	name="routingNumber"
+	value="evilsRoutingNumber"/>
+<input type="hidden"
+	name="account"
+	value="evilsAccountNumber"/>
+<input type="submit"
+	value="Win Money!"/>
+</form>
+```
+你喜欢赢钱，所以你点击提交按钮。 在这个过程中，你无意中将100美元转移给了恶意用户。 之所以发生这种情况是因为，即使恶意网站无法访问您的cookies，但是与您的银行相关的cookies仍然与请求一起发送。
+
+最糟糕的是，整个过程可能已经使用JavaScript自动完成。 这意味着你甚至不需要点击按钮。 那么我们如何保护自己免受这种攻击呢？
+### 18.2 同步器令牌模式
+上述之所以能够发起恶意攻击，是因为来自银行网站的HTTP请求和来自恶意网站的请求是完全一样的。这意味着服务器端无法拒绝来自恶意网站的请求，但允许来自银行网站的合法请求。为了防止CSRF攻击，我们需要确保恶意网站无法提供请求中的内容。
+
+一种解决方案是使用同步器令牌模式。此解决方案是为了确保除了我们的会话cookie之外，每个请求还需要一个随机生成的令牌作为HTTP参数。提交请求时，服务器端必须查找参数的期望值，并将其与请求中的实际值进行比较。如果值不匹配，请求将失败。
+
+我们可以放宽限制，只有在更新站点状态的每个HTTP请求中才要求加入令牌。这可以安全地完成，因为同源策略确保恶意站点无法读取响应。此外，我们不希望在HTTP GET中包含随机标记，因为这会导致令牌泄漏。
+
+让我们来看看我们的例子将如何改变。假设随机生成的令牌存在于名为_csrf的HTTP参数中。例如，转账请求看起来像这样：
+
+```
+POST /transfer HTTP/1.1
+Host: bank.example.com
+Cookie: JSESSIONID=randomid; Domain=bank.example.com; Secure; HttpOnly
+Content-Type: application/x-www-form-urlencoded
+
+amount=100.00&routingNumber=1234&account=9876&_csrf=<secure-random>
+```
+
+你会注意到我们添加了一个随机值的_csrf参数。 现在，恶意的网站将无法猜测_csrf参数（必须在恶意网站上明确提供）的正确值，并且当服务器端将实际令牌与预期令牌进行比较时，发现不一致，因此，转账的恶意攻击将失败。
+### 18.3 何时启用CSRF攻击防御
+什么时候应该使用CSRF保护？ 我们的建议是对于普通用户可以通过浏览器处理的任何请求使用CSRF保护。 如果您只创建非浏览器客户端使用的服务，则可能需要禁用CSRF保护。
+#### 18.3.1 CSRF防御和JSON
+一个常见的问题是“我需要对JavaScript所做的JSON请求进行CSRF防护吗？ 简而言之，这将视情况而定。 但是，您必须非常小心，因为存在会影响JSON请求的CSRF攻击。 例如，恶意用户可以使用以下格式创建带有CSRF攻击的JSON：
+
+```
+<form action="https://bank.example.com/transfer" method="post" enctype="text/plain">
+<input name='{"amount":100,"routingNumber":"evilsRoutingNumber","account":"evilsAccountNumber", "ignore_me":"' value='test"}' type='hidden'>
+<input type="submit"
+	value="Win Money!"/>
+</form>
+```
+这将产生以下JSON结构:
+
+```
+{ "amount": 100,
+"routingNumber": "evilsRoutingNumber",
+"account": "evilsAccountNumber",
+"ignore_me": "=test"
+}
+```
+如果一个应用程序没有对Content-Type类型进行校验，那么将利用这个漏洞进行CSRF攻击。 即使应用程序设置了对Content-Type进行了验证，那么在基于Spring MVC应用程序中仍然可以通过将URL后缀更新为以“.json”结尾进行攻击，如下所示：
+
+```
+<form action="https://bank.example.com/transfer.json" method="post" enctype="text/plain">
+<input name='{"amount":100,"routingNumber":"evilsRoutingNumber","account":"evilsAccountNumber", "ignore_me":"' value='test"}' type='hidden'>
+<input type="submit"
+	value="Win Money!"/>
+</form>
+```
+
+#### 18.3.2 CSRF和无状态浏览器应用程序
+如果我的应用程序是无状态的呢？ 这并不一定意味着你受到保护。 事实上，如果用户不需要在Web浏览器中针对特定请求执行任何操作，则它们可能仍然容易受到CSRF攻击。
+
+例如，考虑一个应用程序使用一个包含所有状态的自定义cookie（而不是JSESSIONID）来进行身份验证。 当CSRF攻击发生时，自定义cookie将与请求一起被发送，与我们前面的示例中发送的JSESSIONID cookie相同。
+
+使用基本身份验证的用户也容易受到CSRF攻击，因为浏览器将自动在所有请求中包含用户名密码，这与前面示例中发送的JSESSIONID Cookie相同。
+### 18.4 启用Spring Security CSRF防护
+那么，使用Spring Security来保护我们的站点免受CSRF攻击需要采取哪些措施？ 下面概述了使用Spring Security的CSRF保护的步骤：
+
+* 恰当的HTTP请求方法
+* 配置CSRF保护
+* 包含CSRF令牌
+
+#### 18.4.1 恰当的HTTP请求方法
+防止CSRF攻击的第一步是确保您的网站使用正确的HTTP动词。 具体来说，在配置Spring Security的CSRF之前，您需要确定您的应用程序使用PATCH，POST，PUT或DELETE来修改任何状态。
+
+这不是Spring Security的限制，而是CSRF防御的一般要求。这是因为在HTTP GET请求中包含敏感信息会导致信息泄漏。 请参阅[RFC 2616规范的第15.1.3 对URI中的敏感信息进行编码](https://www.w3.org/Protocols/rfc2616/rfc2616-sec15.html#sec15.1.3)的相关描述。
+#### 18.4.2 配置CSRF保护
+下一步是在您的应用程序中包含Spring Security的CSRF保护。 一些框架通过判断用户Session是否过期来判断CSRF令牌是否过期，但这会导致它自己的问题。 相反，默认情况下，Spring Security的CSRF保护将产生HTTP 403访问被拒绝。 这可以通过配置AccessDeniedHandler来以不同的方式处理InvalidCsrfTokenException异常。
+
+从Spring Security 4.0开始，默认情况下使用XML配置启用CSRF保护。 如果您想禁用CSRF保护，则可以参考下面的XML配置。
+
+```
+<http>
+	<!-- ... -->
+	<csrf disabled="true"/>
+</http>
+```
+默认情况下，使用Java配置启用CSRF保护。 如果您想禁用CSRF，则可以在下面看到相应的Java配置。 有关如何配置CSRF保护的其他选项，请参阅csrf()的Javadoc。
+
+```
+@EnableWebSecurity
+public class WebSecurityConfig extends
+WebSecurityConfigurerAdapter {
+
+@Override
+protected void configure(HttpSecurity http) throws Exception {
+	http
+	.csrf().disable();
+}
+}
+```
+#### 18.4.3 包含CSRF令牌
+
+##### 表单提交
+最后一步是确保在所有PATCH，POST，PUT和DELETE方法中包含CSRF标记。 一种方法是使用_csrf请求属性来获取当前的CsrfToken。 下面显示了使用JSP进行此操作的示例：
+
+```
+<c:url var="logoutUrl" value="/logout"/>
+<form action="${logoutUrl}"
+	method="post">
+<input type="submit"
+	value="Log out" />
+<input type="hidden"
+	name="${_csrf.parameterName}"
+	value="${_csrf.token}"/>
+</form>
+```
+更简单的方法是使用Spring Security JSP标记库中的csrfInput标记。
+
+> 如果您正在使用Spring MVC <form：form>标记或Thymeleaf 2.1+,并且正在使用@EnableWebSecurity，则CsrfToken会自动包含在表单中（使用CsrfRequestDataValueProcessor）。
+
+##### Ajax和JSON请求
+如果您使用的是JSON，则无法在HTTP参数中提交CSRF令牌。 相反，您可以在HTTP请求头中提交Token令牌。 一个典型的用法是将CSRF令牌包含在meta标签中。 下面显示了在JSP中的例子：
+
+```
+<html>
+<head>
+	<meta name="_csrf" content="${_csrf.token}"/>
+	<!-- default header name is X-CSRF-TOKEN -->
+	<meta name="_csrf_header" content="${_csrf.headerName}"/>
+	<!-- ... -->
+</head>
+<!-- ... -->
+```
+您可以使用Spring Security JSP标记库中较简单的csrfMetaTags标记，而不是手动创建元标记。
+然后，您可以在所有的Ajax请求中包含令牌。 如果您使用的是jQuery，可以使用以下方法：
+
+```
+$(function () {
+var token = $("meta[name='_csrf']").attr("content");
+var header = $("meta[name='_csrf_header']").attr("content");
+$(document).ajaxSend(function(e, xhr, options) {
+	xhr.setRequestHeader(header, token);
+});
+});
+```
+作为jQuery的替代品，我们推荐使用cujoJS的rest.js. rest.js模块为以RESTful方式处理HTTP请求和响应提供了高级支持。 核心功能是通过将拦截器根据需要上下文化HTTP客户端,并且为HTTP客户端添加行为的能力。
+
+```
+var client = rest.chain(csrf, {
+token: $("meta[name='_csrf']").attr("content"),
+name: $("meta[name='_csrf_header']").attr("content")
+});
+```
+配置的客户端可以与需要向CSRF保护资源发出请求的应用程序的任何组件共享。 rest.js和jQuery之间的一个重要区别是，只有使用配置的客户端发出的请求才会包含CSRF令牌，而对于所有请求都包含令牌的jQuery。 限定哪些请求接收令牌的能力有助于防止将CSRF令牌泄露给第三方。 有关rest.js的更多信息，请参阅rest.js参考文档。
+##### CookieCsrfTokenRepository
+可能会有用户想要将CsrfToken保存在cookie中。 默认情况下，CookieCsrfTokenRepository将写入名为XSRF-TOKEN的cookie，并从名为X-XSRF-TOKEN的头文件或HTTP参数_csrf中读取。 这些默认值来自[AngularJS](https://docs.angularjs.org/api/ng/service/$http#cross-site-request-forgery-xsrf-protection)。
+
+您可以使用以下方法在XML中配置CookieCsrfTokenRepository：
+
+```
+<http>
+	<!-- ... -->
+	<csrf token-repository-ref="tokenRepository"/>
+</http>
+<b:bean id="tokenRepository"
+	class="org.springframework.security.web.csrf.CookieCsrfTokenRepository"
+	p:cookieHttpOnly="false"/>
+```
+
+> 上面的配置显式设置cookieHttpOnly = false。 这是允许JavaScript（即AngularJS）读取它的必要条件。 如果您不需要直接使用JavaScript读取cookie，则建议省略cookieHttpOnly = false以提高安全性。
+
+您可以使用以下命令在Java配置中配置CookieCsrfTokenRepository：
+
+```
+@EnableWebSecurity
+public class WebSecurityConfig extends
+		WebSecurityConfigurerAdapter {
+
+	@Override
+	protected void configure(HttpSecurity http) throws Exception {
+		http
+			.csrf()
+				.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse());
+	}
+}
+```
+
+> 上面的配置显式设置cookieHttpOnly = false。 这是允许JavaScript（即AngularJS）读取它的必要条件。 如果您不需要直接使用JavaScript读取cookie，则建议省略cookieHttpOnly = false（而不是使用新的CookieCsrfTokenRepository()）来提高安全性。
+
+### 18.5 CSRF警告
+开启CSRF防护时会有一些注意事项。
+#### 18.5.1 Token过期
+Spring Security CSRF的第一个问题是，预期的CSRF令牌存储在HttpSession中，所以一旦HttpSession过期，你配置的AccessDeniedHandler将收到一个InvalidCsrfTokenException异常。 如果您使用默认的AccessDeniedHandler，浏览器将得到一个HTTP 403，并显示一个糟糕的错误消息。
+> 有人可能会问，为什么预期的CsrfToken默认不存储在cookie中。 这是因为有漏洞，其中header（即指定cookie）可以由另一个域设置。 这与Ruby on Rails在 请求header为X-Requested-With存在时不再跳过CSRF检查的原因是一样的。 有关如何执行漏洞的详细信息，请参阅此webappsec.org线程。 另一个缺点是消除状态（即token过期），如果token受到威胁，则无法强制终止token。
+
+解决当前用户遇到Token过期的简单方法是使用一些JavaScript，让用户知道他们的会话即将过期。 用户可以通过点击一个按钮来刷新会话。
+
+另外，指定一个自定义的AccessDeniedHandler允许你以任何你喜欢的方式处理InvalidCsrfTokenException。 有关如何自定义AccessDeniedHandler的示例，请参阅本手册提供的[xml](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#nsa-access-denied-handler)和[Java配置](https://github.com/spring-projects/spring-security/blob/3.2.0.RC1/config/src/test/groovy/org/springframework/security/config/annotation/web/configurers/NamespaceHttpAccessDeniedHandlerTests.groovy#L64)的链接。
+
+最后，可以将应用程序配置为使用不会过期的[CookieCsrfTokenRepository](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#csrf-cookie)。 如前所述，这不如使用Session那样安全，但在很多情况下可以足够好。
+#### 18.5.2 登陆
+为了防止伪造登录请求，登录表单也应该防止CSRF攻击。由于CsrfToken存储在HttpSession中，这意味着只要CsrfToken令牌属性被访问，就会创建一个HttpSession。虽然这在RESTful/无状态架构中听起来很糟糕，但现实是状态对于实现实际安全性是必要的。没有状态，如果令牌受到威胁，我们无能为力。实际上，CSRF令牌规模相当小，对我们的架构的影响是微不足道的。
+
+保护登录表单的常用技术是使用JavaScript函数在表单提交之前获取有效的CSRF令牌。通过这样做，不需要考虑Session超时（在前面的章节中讨论），因为Session是在表单提交之前创建的（假设CookieCsrfTokenRepository没有被配置），所以用户可以留在登录页面并在需要时提交用户名/密码。为了达到这个目的，你可以利用Spring Security提供的CsrfTokenArgumentResolver，并像这里描述的那样公开一个端点。
+#### 18.5.3 退出
+添加CSRF后，用后只能通过HTTP POST更新LogoutFilter。 这确保了在用户注销时需要CSRF令牌，并且恶意用户不能强行注销您的用户。
+
+一种方法是使用表单注销。 如果你真的想要一个链接，你可以使用JavaScript来让链接执行一个POST（也许在一个隐藏的窗体上）。 对于禁用JavaScript的浏览器，您可以选择使用链接将用户引导至执行POST的注销确认页面。
+
+如果你真的想使用HTTP GET注销，你可以这样做，但请记住这通常不建议。 例如，下面的Java配置将执行注销，使用任何HTTP方法请求URL/注销：
+
+```
+@EnableWebSecurity
+public class WebSecurityConfig extends
+WebSecurityConfigurerAdapter {
+
+	@Override
+	protected void configure(HttpSecurity http) throws Exception {
+		http
+			.logout()
+				.logoutRequestMatcher(new AntPathRequestMatcher("/logout"));
+	}
+}
+```
+#### 18.5.4 Multipart (文件上传)
+使用multipart/form-data表单数据的CSRF保护有两种选择。 每个选择都有其折衷方案。
+
+* [在Spring Security之前放置MultipartFilter](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#csrf-multipartfilter)
+* [包含CSRF令牌](https://docs.spring.io/spring-security/site/docs/4.2.3.RELEASE/reference/htmlsingle/#csrf-include-csrf-token-in-action)
+
+> 在将Spring Security的CSRF保护与multipart/form-data文件上传集成之前，请确保您的文件上传功能正确使用。 有关在Spring中使用multipart/form-data表单的更多信息可以在Spring参考的17.10 [Spring的multipart（文件上传）支持部分](https://docs.spring.io/spring/docs/3.2.x/spring-framework-reference/html/mvc.html#mvc-multipart)和[MultipartFilter](https://docs.spring.io/spring/docs/3.2.x/javadoc-api/org/springframework/web/multipart/support/MultipartFilter.html) javadoc中找到。
+
+##### 在Spring Security之前放置MultipartFilter
+第一个选择是确保在Spring Security过滤器之前指定MultipartFilter。 在Spring Security过滤器之前指定MultipartFilter意味着没有调用MultipartFilter的授权，这意味着任何人都可以在服务器上放置临时文件。 但是，只有授权用户才能提交由您的应用程序处理的文件。 一般来说，这是推荐的方法，因为临时文件上传应该对大多数服务器产生的影响可忽略。
+
+为了确保在Java配置的Spring Security过滤器之前指定了MultipartFilter，用户可以覆盖beforeSpringSecurityFilterChain，如下所示：
+
+```
+public class SecurityApplicationInitializer extends AbstractSecurityWebApplicationInitializer {
+
+	@Override
+	protected void beforeSpringSecurityFilterChain(ServletContext servletContext) {
+		insertFilters(servletContext, new MultipartFilter());
+	}
+}
+```
+为了确保在使用XML配置的Spring Security过滤器之前指定了MultipartFilter，用户可以确保MultipartFilter的<filter-mapping>元素位于web.xml中的springSecurityFilterChain之前，如下所示：
+
+```
+<filter>
+	<filter-name>MultipartFilter</filter-name>
+	<filter-class>org.springframework.web.multipart.support.MultipartFilter</filter-class>
+</filter>
+<filter>
+	<filter-name>springSecurityFilterChain</filter-name>
+	<filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+</filter>
+<filter-mapping>
+	<filter-name>MultipartFilter</filter-name>
+	<url-pattern>/*</url-pattern>
+</filter-mapping>
+<filter-mapping>
+	<filter-name>springSecurityFilterChain</filter-name>
+	<url-pattern>/*</url-pattern>
+</filter-mapping>
+```
+##### 包含CSRF令牌
+如果允许未经授权的用户上传临时文件是不可接受的，另一种方法是将MultipartFilter放置在Spring Security过滤器之后，并将CSRF作为查询参数包含在表单的action属性中。 下面显示了一个jsp的例子
+
+```
+<form action="./upload?${_csrf.parameterName}=${_csrf.token}" method="post" enctype="multipart/form-data">
+```
+这种方法的缺点是查询参数可能被泄露。 更为普遍的是，将敏感数据放在请求体或请求头中以确保其不泄漏是最好的做法。 附加信息可以在RFC 2616第15.1.3节中[对URI中的敏感信息进行编码](https://www.w3.org/Protocols/rfc2616/rfc2616-sec15.html#sec15.1.3)。
+#### 18.5.5 HiddenHttpMethodFilter
+HiddenHttpMethodFilter应放置在Spring Security过滤器之前。 一般来说这是事实，但是在防止CSRF攻击时可能会产生额外的影响。
+
+请注意，HiddenHttpMethodFilter只覆盖POST上的HTTP方法，所以这实际上不会导致任何实际问题。 不过，确保在Spring Security过滤器之前放置它仍然是最佳实践。
+### 18.6 覆盖默认值
+Spring Security的目标是提供保护您的用户免受攻击的默认设置。 这并不意味着你被迫接受所有的默认值。
+
+例如，您可以提供一个自定义CsrfTokenRepository来覆盖CsrfToken的存储方式。
+
+您也可以指定一个自定义的RequestMatcher来确定哪些请求受到CSRF的保护（也许您不在乎是否注销）。 简而言之，如果Spring Security的CSRF保护行为不像您想要的那样完美，您可以自定义行为。 有关如何使用XML和CsrfConfigurer javadoc进行这些自定义的详细信息，请参阅第41.1.18节“<csrf>”文档，以获取有关如何在使用Java配置时进行这些自定义的详细信息。
+## 19. CORS
+
+
+
+
+
+
+
+
+
