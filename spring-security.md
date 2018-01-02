@@ -1,4 +1,4 @@
----
+
 # Spring Security参考文档
 
 Authors
@@ -8,7 +8,18 @@ Ben Alex , Luke Taylor , Rob Winch , Gunnar Hillert
 Copyright © 2004-2015
 Copies of this document may be made for your own use and for distribution to others, provided that you do not charge any fee for such copies and further provided that each copy contains this Copyright Notice, whether distributed in print or electronically.
 
+# 关于本翻译 
+### 翻译者：gangzi828
+
+### 联系方式：QQ-1139872666
+
+译者简介：本人是一个对新技术的热爱者，平时喜欢翻译一些国外技术资料，是开源技术的热衷者。现就职于杭州一家网络与信息安全公司，负责公司项目组的java开发和android开发。
+
+#### 声明：这个本人业余时间的翻译作品，任何组织和个人不得以商业利益为目的进行非法传播。如有翻译不正确之处，请多多指正，喷子请远离。若您对本翻译计划感兴趣，欢迎您的加入，共同为开源界做贡献。如果您觉得该文档对您有帮助，不妨打赏兄弟一杯咖啡，以示鼓励。
+<center>![](me.png)</center>
+
 ---
+
 # Ⅰ.前言
 ## 	1.入门
 ## 2.简介
@@ -19,16 +30,8 @@ Copies of this document may be made for your own use and for distribution to oth
 ## 7.示例应用
 ## 8.Spring Security社区
 ### 8.1 问题跟踪
-Spring Security使用JIRA来管理bug报告和增强请求。 如果您发现bug，请使用JIRA登录报告。 不要在支持论坛，邮件列表或通过电子邮件将bug发送给项目的开发人员。 这种方法不正规，我们更喜欢使用正规的方式来管理bug。
-
-如果可能，在您的bug报告中，请提供一个JUnit测试，证明任何不正确的行为。 或者，更好的是提供一个修正问题的修补程序。 同样地，尽管我们只接受增强请求，但如果您包含相应的单元测试，欢迎更新增强功能。 这对于确保项目测试覆盖率是必要的。
-
-您可以访问[https://github.com/spring-projects/spring-security/issues](https://github.com/spring-projects/spring-security/issues)上的问题跟踪器。
-
 ### 8.2 参与Spring Security项目
-我们欢迎您参与Spring Security项目。 有很多方式可以为该项目做出贡献，包括阅读论坛和回答别人的问题，编写新的代码，改进现有的代码，协助文档编制，开发示例或教程，或者只是提出建议。
 ### 8.3 更多信息
-欢迎提出有关Spring Security的问题和意见。 您可以使用Spring Over Stack网站[http://spring.io/questions](http://spring.io/questions)与框架的其他用户讨论Spring Security。 请记住使用JIRA进行bug报告，如上所述。
 # II.架构与实施
 ## 9.技术概述
 ### 9.1 运行时环境
@@ -50,6 +53,16 @@ Spring Security使用JIRA来管理bug报告和增强请求。 如果您发现bug
 #### 9.5.2 受保护对象和AbstractSecurityInterceptor
 ### 9.6 本地化
 ## 10.核心服务
+### 10.1 AuthenticationManager, ProviderManager和AuthenticationProvider
+#### 10.1.1 认证成功时清楚凭证
+#### 10.1.2 DaoAuthenticationProvider
+### 10.2 UserDetailsService实现
+#### 10.2.1 In-Memory Authentication
+#### 10.2.2 JdbcDaoImpl
+### 10.3 密码编码
+#### 10.3.1 什么是hash
+#### 10.3.2 加盐后Hash
+### 10.4 Jackson支持
 # III.测试
 ## 11.测试方法的安全性
 ## 12.Spring MVC测试模块的集成
@@ -61,9 +74,28 @@ Spring Security使用JIRA来管理bug报告和增强请求。 如果您发现bug
 ## 17.Remember-Me认证
 ## 18.跨站请求伪造（CSRF）
 ### 18.1 什么是CSRF
+### 18.2 同步器令牌模式
+### 18.3 何时启用CSRF攻击防御
+#### 18.3.1 CSRF防御和JSON
+#### 18.3.2 CSRF和无状态浏览器应用程序
+### 18.4 启用Spring Security CSRF防护
+#### 18.4.1 恰当的HTTP请求方法
+#### 18.4.2 配置CSRF保护
+#### 18.4.3 包含CSRF令牌
+### 18.5 CSRF警告
+#### 18.5.1 Token过期
+#### 18.5.2 登陆
+#### 18.5.3 退出
+#### 18.5.4 Multipart (文件上传)
+#### 18.5.5 HiddenHttpMethodFilter
+### 18.6 覆盖默认值
 ## 19.CORS
 ## 20.Security Http响应头
 ## 21.Session管理
+### 21.1 SessionManagementFilter
+### 21.2 SessionAuthenticationStrategy
+### 21.3 并发Session控制
+#### 21.3.1 查询当前登陆用户及其会话的SessionRegistry
 ## 22.匿名认证
 ## 23.WebSocket安全
 # V.授权
@@ -98,7 +130,18 @@ Spring Security是一款功能强大，可定制的身份验证和访问控制�
 
 ---
 # Ⅰ.前言
+## 8.Spring Security社区
+### 8.1 问题跟踪
+Spring Security使用JIRA来管理bug报告和增强请求。 如果您发现bug，请使用JIRA登录报告。 不要在支持论坛，邮件列表或通过电子邮件将bug发送给项目的开发人员。 这种方法不正规，我们更喜欢使用正规的方式来管理bug。
 
+如果可能，在您的bug报告中，请提供一个JUnit测试，证明任何不正确的行为。 或者，更好的是提供一个修正问题的修补程序。 同样地，尽管我们只接受增强请求，但如果您包含相应的单元测试，欢迎更新增强功能。 这对于确保项目测试覆盖率是必要的。
+
+您可以访问[https://github.com/spring-projects/spring-security/issues](https://github.com/spring-projects/spring-security/issues)上的问题跟踪器。
+
+### 8.2 参与Spring Security项目
+我们欢迎您参与Spring Security项目。 有很多方式可以为该项目做出贡献，包括阅读论坛和回答别人的问题，编写新的代码，改进现有的代码，协助文档编制，开发示例或教程，或者只是提出建议。
+### 8.3 更多信息
+欢迎提出有关Spring Security的问题和意见。 您可以使用Spring Over Stack网站[http://spring.io/questions](http://spring.io/questions)与框架的其他用户讨论Spring Security。 请记住使用JIRA进行bug报告，如上所述。
 # II.架构与实施
 ## 9.技术概述
 ### 9.1 运行时环境
@@ -367,7 +410,7 @@ AuthenticationManager只是一个接口，因此我们可以根据自己的业�
 
 例如，在基于Web表单登录的认证机制中，处理认证过程过滤器引用了ProviderManager实例，并通过ProviderManager实例处理其身份验证请求。身份认证提供者有时可以与身份验证机制互换，而在其他情况下，它将取决于特定的身份验证机制。例如，DaoAuthenticationProvider和LdapAuthenticationProvider与简单的任何基于用户名/密码的认证机制兼容，因此可以使用基于表单的登录或HTTP Basic身份验证。另一方面，一些认证机制创建一个认证请求对象，该对象只能由一种类型的AuthenticationProvider来解释。典型的例子是JA-SIG CAS，它使用服务票据的概念，因此只能由一个CasAuthenticationProvider进行身份验证。您不必太在意这一点，因为如果您忘记注册一个合适的认证提供者，则当尝试进行身份验证时，您将收到一个ProviderNotFoundException异常。
 
-##### 10.1.1 认证成功时清楚凭证
+#### 10.1.1 认证成功时清除凭证
 
 默认情况下（从Spring Security 3.1开始），ProviderManager将尝试从认证对象中清除成功认证请求返回的任何敏感凭证信息。这样可以防止密码被长期保留。
 
@@ -448,7 +491,7 @@ Spring Security还提供了从JDBC数据源获取认证信息的UserDetailsServi
 Spring Security的PasswordEncoder接口用于以某种方式编码密码然后在存储到数据库中。密码不应该以明文形式存储。密码在存储时必须使用bcrypt等单向密码散列算法进行编码，bcrypt算法使用内置的不同的盐值来进行编码。密码编码时最好不要使用简单的哈希函数，如MD5或SHA，甚至是加盐版本的MD5和SHA。 Bcrypt故意设计为缓慢，并阻止离线密码破解，而标准散列算法快速，可以轻松地用用穷举算法进行破解。您可能认为这并不会影响你，因为您的密码数据库是安全的，脱机攻击并不是风险。如果你有这种想法，那么请进行一些研究，并阅读所有以这种方式受到妥协的高调网站，并为保护密码不安全而被劫持。使用org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder“是保护密码安全的一个不错的选择，它还有其他常用编程语言中的兼容实现，因此它也是跨平台密码加密的最佳选择。
 
 如果您的系统是使用散列算法加密密码的遗留系统，那么您将需要使用与当前算法相匹配的编码器，至少直到您将用户迁移到更安全的方案（通常这将涉及要求用户设置一个新的密码，因为哈希是不可逆转的）。 Spring Security具有包含传统密码编码实现的包，即org.springframework.security.authentication.encoding。 DaoAuthenticationProvider可以注册新的或旧的PasswordEncoder类型。
-#### 10.3.1 什么是hash?
+#### 10.3.1 什么是hash
 密码散列不是Spring Security所特有的，但对于不熟悉概念的用户来说，这是一个常见的混淆策略。 散列（或摘要）算法是一种单向函数，它从一些输入数据（如密码）产生一段固定长度的输出数据（散列）。 例如，字符串“password”（十六进制）的MD5哈希值是：
 
 ```
@@ -1035,6 +1078,98 @@ Spring Security的目标是提供保护您的用户免受攻击的默认设置�
 
 您也可以指定一个自定义的RequestMatcher来确定哪些请求受到CSRF的保护（也许您不在乎是否注销）。 简而言之，如果Spring Security的CSRF保护行为不像您想要的那样完美，您可以自定义行为。 有关如何使用XML和CsrfConfigurer javadoc进行这些自定义的详细信息，请参阅第41.1.18节“<csrf>”文档，以获取有关如何在使用Java配置时进行这些自定义的详细信息。
 ## 19. CORS
+## 21. Session管理
+在Spring Security中，与HTTP会话相关的功能由SessionManagementFilter和SessionAuthenticationStrategy接口联合来处理。 典型的用法包括Session固定攻击防御，Session超时检测和限定认证用户可同时打开多少个Session。
+### 21.1 SessionManagementFilter
+SessionManagementFilter根据SecurityContextHolder的当前内容检查SecurityContextRepository的内容，以确定用户是否在当前请求期间通过了身份验证，通常是通过非交互式身份验证机制（如预先身份验证或记住我[17]）。如果SecurityContextRepository包含安全上下文，则该过滤器不执行任何操作。如果SecurityContextRepository不包含安全上下文，并且线程本地变量SecurityContext包含（非匿名）Authentication对象，则过滤器将假定它们已被堆栈中的前面的过滤器认证，然后它将调用已配置的SessionAuthenticationStrategy。
+
+如果当前用户未通过身份验证，则该过滤器将检查该请求的Session是否为有效的会话ID（例如，由于超时，可能导致Session过期），并将调用已经配置的InvalidSessionStrategy（如果已设置）。最常见的做法就是重定向到一个固定的URL，这被封装在标准实现SimpleRedirectInvalidSessionStrategy中。如前所述，在通过命名空间配置无效会话URL时也是重定向到一个固定的URL。
+### 21.2 SessionAuthenticationStrategy
+SessionAuthenticationStrategy被SessionManagementFilter和AbstractAuthenticationProcessingFilter使用，所以如果你正在使用一个自定义的form-login类，这时你需要将SessionAuthenticationStrategy实例注入到这两个过滤器类中。 在这种情况下，通过命名空间和自定义Bean的方式的典型配置可能如下所示：
+
+```
+<http>
+<custom-filter position="FORM_LOGIN_FILTER" ref="myAuthFilter" />
+<session-management session-authentication-strategy-ref="sas"/>
+</http>
+
+<beans:bean id="myAuthFilter" class=
+"org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter">
+	<beans:property name="sessionAuthenticationStrategy" ref="sas" />
+	...
+</beans:bean>
+
+<beans:bean id="sas" class=
+"org.springframework.security.web.authentication.session.SessionFixationProtectionStrategy" />
+```
+注意，如果你的Session实现了HttpSessionBindingListener，并且你还将一个Bean（包括Spring会话范围的Bean）存在了此Session中，这时，如果你使用默认的SessionFixationProtectionStrategy可能会导致一些问题。 具体信息，请参阅此类的Javadoc文档以获取更多信息。
+### 21.3 并发Session控制
+Spring Security能够防止同一个账号主体同时对同一个应用程序进行多次身份验证。许多独立软件开发商利用这个来强制许可，而网络管理员喜欢这个功能，因为它有助于防止人们共享登录用户名。例如，您可以阻止用户“Batman”从两个不同的会话登录到Web应用程序。您可以使其以前的登录失效，也可以在尝试重新登录时报告错误，防止第二次登录。请注意，如果您采用第二种方式，那么未明确注销的用户（例如，刚刚关闭浏览器的用户）在其Session过期之前将无法再次登录。
+
+Spring Security支持通过命名空间的方式进行并发Session控制的配置，因此请参考前面的Spring Security命名空间章节以获取最简单的配置，有时你需要自定义一些配置。
+
+Spring Security针对并发Session控制，提供了SessionAuthenticationStrategy的专用实现类，该实现类名为ConcurrentSessionControlAuthenticationStrategy。
+
+> 以前并发身份验证通过在ConcurrentSessionController控制器中注入ProviderManager，由ProviderManager来完成认证。它可以检测用户是否视图超过最大会话限制的允许数量。 但是，这种方法需要事先创建一个HTTP会话，这是不可取的。 在Spring Security 3中，用户首先由AuthenticationManager进行身份验证，一旦身份验证成功，将创建一个会话并检查是否允许打开另一个会话。
+
+要使用并发会话支持，您需要将以下内容添加到web.xml中：
+
+```
+<listener>
+	<listener-class>
+	org.springframework.security.web.session.HttpSessionEventPublisher
+	</listener-class>
+</listener>
+```
+另外，你还需要将ConcurrentSessionFilter添加到您的FilterChainProxy中。 ConcurrentSessionFilter需要两个属性sessionRegistry（通常指向SessionRegistryImpl的实例）和expiredUrl（指向会话过期时显示的页面）。 通过命名空间方式来配置FilterChainProxy和其他默认bean的代码如下所示：
+
+```
+<http>
+<custom-filter position="CONCURRENT_SESSION_FILTER" ref="concurrencyFilter" />
+<custom-filter position="FORM_LOGIN_FILTER" ref="myAuthFilter" />
+
+<session-management session-authentication-strategy-ref="sas"/>
+</http>
+
+<beans:bean id="concurrencyFilter"
+class="org.springframework.security.web.session.ConcurrentSessionFilter">
+<beans:property name="sessionRegistry" ref="sessionRegistry" />
+<beans:property name="expiredUrl" value="/session-expired.htm" />
+</beans:bean>
+
+<beans:bean id="myAuthFilter" class=
+"org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter">
+<beans:property name="sessionAuthenticationStrategy" ref="sas" />
+<beans:property name="authenticationManager" ref="authenticationManager" />
+</beans:bean>
+
+<beans:bean id="sas" class="org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy">
+<beans:constructor-arg>
+	<beans:list>
+	<beans:bean class="org.springframework.security.web.authentication.session.ConcurrentSessionControlAuthenticationStrategy">
+		<beans:constructor-arg ref="sessionRegistry"/>
+		<beans:property name="maximumSessions" value="1" />
+		<beans:property name="exceptionIfMaximumExceeded" value="true" />
+	</beans:bean>
+	<beans:bean class="org.springframework.security.web.authentication.session.SessionFixationProtectionStrategy">
+	</beans:bean>
+	<beans:bean class="org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy">
+		<beans:constructor-arg ref="sessionRegistry"/>
+	</beans:bean>
+	</beans:list>
+</beans:constructor-arg>
+</beans:bean>
+
+<beans:bean id="sessionRegistry"
+	class="org.springframework.security.core.session.SessionRegistryImpl" />
+```
+
+将监听器添加到web.xml中会导致每当HttpSession开始或终止时，都会将ApplicationEvent发布到Spring ApplicationContext。 这很重要，因为它允许在会话结束时通知SessionRegistryImpl。 没有它，即使用户退出其他会话或超时，用户将永远无法再次登录。
+
+#### 21.3.1查询当前登陆用户及其会话的SessionRegistry
+通过命名空间或者使用普通的bean的方式来配置并发Session控制还有一个好处，即为你提供一个可以在应用程序中直接使用的SessionRegistry的引用，所以即使你不想限制用户可拥有的会话数量，这样配置系统架构也是值得的。您可以将maximumSession属性设置为-1以允许无限制的会话。如果您使用的是命名空间的配置方式，则可以使用session-registry-alias属性为内部创建的SessionRegistry设置别名，并提供一个引用，您可以将其注入到您自己的bean中。
+
+getAllPrincipals()方法为您提供当前已通过身份验证的用户列表。您可以通过调用getAllSessions(Object principal，boolean includeExpiredSessions)方法来列出用户的会话，该方法返回SessionInformation对象的列表。您也可以通过在SessionInformation实例上调用expireNow()来将此用户的Session设置为过期。当用户返回到应用程序时，将阻止他们继续进行。因此，您可能会发现这些方法在管理应用程序时很有用。请查阅Javadoc来获取更多信息。
 
 
 
